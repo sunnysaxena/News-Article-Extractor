@@ -1,105 +1,96 @@
-import json
 import re
+import os
+import csv
+import json
 import time
 
 import requests
-import connector
 import pandas as pd
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 
-year = int(input('Enter year : '))
-sc_id = str(input('Enter company id : ').upper())
+df = pd.DataFrame(
+    columns=['datePublished', 'company', 'author', 'headline', 'description', 'articleBody', 'tags', 'keywords', 'url'])
 
-# year = 2017
-# sc_id = 'RI'
-format = '.csv'
-page_no = 11
-next_no = 1
-all_links = []
-
-driver = connector.get_driver()
-url = connector.get_base_url(company=sc_id, year=year)
+urls = pd.read_csv('ONG_2011_2024.csv')['articles'].tolist()
+company = 'ONGC'
+counter = 1
+next_counter = 50
 
 
-# print("I_url :" + str(url))
-# print('\n')
+def get_blog_content(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    all_script = soup.find_all('script', attrs={'type': 'application/ld+json'})
+
+    raw_articles_str = all_script[2].get_text().replace('\r\n', ' ')
+
+    parts = re.split(r"""("[^"]*"|'[^']*')""", raw_articles_str)
+
+    parts[::2] = map(lambda s: "".join(s.split()), parts[::2])
+
+    article_str = "".join(parts)
+    article_str = article_str[1:]
+    article_str = article_str[:-1]
+    article_dict = json.loads(article_str, strict=False)
+
+    all_tags = soup.find_all('div', attrs={'class': 'tags_first_line'})
+
+    lst_all_tags = [i.get_text() for i in all_tags]
+
+    tags = lst_all_tags[0].replace('Tags:', '')
+    tags = tags.replace('\n', '')
+    tags = tags.split('#')
+    tags = tags[1:]
+    tags = ', '.join([str(elem).strip() for elem in tags])
+
+    article_dict['tags'] = tags
+    # print(article_dict['author']['name'])
+    return article_dict
 
 
-def scrape_money_control():
-    global url, page_no, next_no
-    print(url)
-    while url:
-        driver.get(url)
-
-        # Find all elements with the specified class name
-        pagination = driver.find_element(By.XPATH, value='//div[@class="pages MR10 MT15"]')
-        elements = pagination.find_elements_by_css_selector('a[href]')
-        pagination_link = [element.get_attribute('href') for element in elements]
-        pagination_link.insert(0, url)
-        texts = pagination.find_elements_by_css_selector('a')
-        anchor_texts = [text.text for text in texts]
-        print(anchor_texts)
-
-        if 'Next »' in anchor_texts or '« Previous' in anchor_texts:
-            # Extract and print the href attribute (link) from each anchor tag
-            # driver.find_element(By.PARTIAL_LINK_TEXT, 'Next')
-            for anchor in pagination_link[:-1]:
-                request = requests.get(anchor)
-                soup = BeautifulSoup(request.text, "html.parser")
-                all_div = soup.find_all('div', attrs={'class': 'MT15 PT10 PB10'})
-
-                div_ = soup.find_all("div", attrs={'class': 'FL PR20'})
-                for title in div_:
-                    href = title.find('a')['href']
-                    article_url = "https://www.moneycontrol.com" + href
-                    all_links.append(article_url)
-        else:
-            # Extract and print the href attribute (link) from each anchor tag
-            # driver.find_element(By.PARTIAL_LINK_TEXT, 'Next')
-            for anchor in pagination_link[:]:
-                request = requests.get(anchor)
-                soup = BeautifulSoup(request.text, "html.parser")
-                all_div = soup.find_all('div', attrs={'class': 'MT15 PT10 PB10'})
-
-                div_ = soup.find_all("div", attrs={'class': 'FL PR20'})
-                for title in div_:
-                    href = title.find('a')['href']
-                    article_url = "https://www.moneycontrol.com" + href
-                    all_links.append(article_url)
-
-
-        try:
-            # next_page = driver.find_element(By.XPATH, value="//a[@class='red-12']")
-            # next_page.click()
-            driver.find_element(By.PARTIAL_LINK_TEXT, 'Next').click()
-
-            get_url = driver.current_url
-            # print("C_url :" + str(get_url))
-
-            page_no = page_no + 10
-            next_no = next_no + 1
-            # url = connector.next_page_url(page_no=page_no, next_no=next_no)
-            url = get_url
-            print("U_url :" + str(url))
-
-            print('===================================== NEXT ===================================================')
-        except:
-            url = None
+for url in urls:
+    if counter == next_counter:
+        print("i'm sleeping...")
         time.sleep(10)
-    driver.quit()
+        next_counter += 50
+    try:
+        article_dict = get_blog_content(url)
 
+        # print(article_dict['datePublished'])
+        # print(article_dict['author']['name'])
+        # print(article_dict['headline'])
+        # print(article_dict['description'])
+        # print(article_dict['articleBody'])
+        # print(article_dict['tags'])
+        # print(article_dict['url'])
+        print('-----------------------------------------------------------------------------')
+        article_list = [[article_dict['datePublished'],
+                         company,
+                         article_dict['author']['name'],
+                         article_dict['headline'],
+                         article_dict['description'],
+                         article_dict['articleBody'],
+                         article_dict['tags'],
+                         article_dict['keywords'],
+                         url]]
 
-scrape_money_control()
+        df = df._append(pd.DataFrame(article_list,
+                                     columns=['datePublished', 'company', 'author', 'headline',
+                                              'description', 'articleBody', 'tags', 'keywords', 'url']),
+                        ignore_index=True)
+        print(df.head())
+        print(df.tail())
+    except Exception as e:
+        article_list = [
+            ['error', company, 'error', 'error', 'error', 'error', 'error', 'error', 'error']]
+        df = df._append(pd.DataFrame(article_list,
+                                     columns=['datePublished', 'company', 'author', 'headline',
+                                              'description', 'articleBody', 'tags', 'keywords', 'url']),
+                        ignore_index=True)
+        continue
 
-df = pd.DataFrame({
-    'articles': all_links
-})
+    counter += 1
 
-df.to_csv("{0}_{1}{2}".format(sc_id, year, format), index=False)
-
-
+print(df)
+df.to_csv("ongc_news.csv", index=False)
