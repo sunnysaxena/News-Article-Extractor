@@ -4,9 +4,10 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 
 options = webdriver.ChromeOptions()
-options.add_argument('--headless')
+# options.add_argument('--headless')
+options.add_argument("--headless=new")
 options.add_argument('--ignore-certificate-errors')
-
+options.add_argument('--window-size=1920,1080')
 options.add_argument("--disable-extensions")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
@@ -24,7 +25,7 @@ def next_page_url(page_no, next_no):
 
 
 def get_driver():
-    return webdriver.Chrome('chromedriver')  # , options=options)
+    return webdriver.Chrome('./chromedriver')  # , options=options)
 
 
 def get_page_no_and_next(url, sc_id, page_no, next, year):
@@ -42,3 +43,9 @@ def get_page_no_and_next(url, sc_id, page_no, next, year):
         url = 'https://www.moneycontrol.com/stocks/company_info/stock_news.php?sc_id=' + sc_id + '&scat=&pageno=' + str(
             page_no) + '&next=' + str(next) + '&durationType=Y&Year=' + str(year) + '&duration=1&news_type='
         return get_page_no_and_next(url, sc_id, page_no, next, year)
+
+
+if __name__ == '__main__':
+    driver = get_driver()
+    url = 'https://en.wikipedia.org/wiki/Flipkart'
+    driver.get(url)
